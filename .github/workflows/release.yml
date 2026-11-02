@@ -20,6 +20,16 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # Le brouillon est créé avant l'envoi des fichiers, sinon les envois
+      # simultanés créent chacun leur propre version.
+      - run: gh release create "$GITHUB_REF_NAME" --draft --title "${GITHUB_REF_NAME#v}" --notes "Mise à jour de Voix Studio."
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: npx electron-builder --win --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - run: gh release edit "$GITHUB_REF_NAME" --draft=false --latest
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
