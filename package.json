@@ -1,0 +1,68 @@
+{
+  "name": "voix-studio",
+  "productName": "Voix Studio",
+  "version": "1.0.0",
+  "description": "Changeur de voix en temps réel avec réglages micro, effets sonores et enregistrement.",
+  "author": "frnmathis71-blip",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "icon": "node scripts/make-icon.js",
+    "build": "electron-builder --win --publish never",
+    "release:patch": "npm version patch && git push --follow-tags",
+    "release:minor": "npm version minor && git push --follow-tags",
+    "release:major": "npm version major && git push --follow-tags"
+  },
+  "build": {
+    "appId": "com.frnmathis.voixstudio",
+    "productName": "Voix Studio",
+    "copyright": "© 2026 frnmathis71-blip",
+    "files": [
+      "main.js",
+      "preload.js",
+      "app/**/*",
+      "build/icon.png"
+    ],
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "build/icon.png",
+      "artifactName": "Voix-Studio-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Voix Studio",
+      "runAfterFinish": true,
+      "installerLanguages": [
+        "fr_FR"
+      ],
+      "language": "1036"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "frnmathis71-blip",
+        "repo": "voix-studio",
+        "releaseType": "release"
+      }
+    ]
+  },
+  "devDependencies": {
+    "electron": "^45.2.1",
+    "electron-builder": "^26.18.0"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.11"
+  }
+}

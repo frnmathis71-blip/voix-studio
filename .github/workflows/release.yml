@@ -1,0 +1,25 @@
+# Construit l'installateur Windows et publie la version sur GitHub à chaque tag « v* ».
+# Les Voix Studio déjà installés la téléchargent et l'installent tout seuls.
+name: Publier une version
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx electron-builder --win --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

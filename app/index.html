@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voix Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">
+    <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="12" width="3" height="8" rx="1.5"/><rect x="9" y="7" width="3" height="18" rx="1.5"/><rect x="15" y="3" width="3" height="26" rx="1.5"/><rect x="21" y="9" width="3" height="14" rx="1.5"/><rect x="27" y="13" width="3" height="6" rx="1.5"/></svg>
+    <span>Voix Studio</span>
+  </div>
+
+  <button id="power" class="power" type="button" aria-pressed="false">
+    <span class="power-dot"></span><span id="powerLabel">Activer le micro</span>
+  </button>
+
+  <div class="top-toggles">
+    <button id="updateBtn" class="update-btn" type="button" hidden>Mise à jour prête : redémarrer</button>
+    <label class="switch" title="Raccourci : ce que vous avez défini dans Routage et raccourcis">
+      <input type="checkbox" id="tglVoice" checked>
+      <span class="switch-ui"></span><span>Transformation</span>
+    </label>
+    <label class="switch">
+      <input type="checkbox" id="tglMonitor">
+      <span class="switch-ui"></span><span>M’écouter</span>
+    </label>
+    <button id="btnMute" class="mute" type="button" aria-pressed="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3"/><path class="slash" d="M4 4l16 16"/></svg>
+      <span id="muteLabel">Micro ouvert</span>
+    </button>
+  </div>
+</header>
+
+<div class="layout">
+  <nav class="side" aria-label="Sections">
+    <button class="nav on" data-tab="voix" type="button">Voix</button>
+    <button class="nav" data-tab="labo" type="button">Labo de voix</button>
+    <button class="nav" data-tab="sons" type="button">Effets sonores</button>
+    <button class="nav" data-tab="micro" type="button">Réglages micro</button>
+    <button class="nav" data-tab="rec" type="button">Enregistrement</button>
+    <button class="nav" data-tab="routage" type="button">Routage et raccourcis</button>
+  </nav>
+
+  <main>
+    <div id="notice" class="notice" hidden></div>
+
+    <!-- VOIX -->
+    <section id="tab-voix" class="tab on">
+      <div class="tab-head">
+        <div>
+          <h1>Voix</h1>
+          <p class="lede">Cliquez sur une voix pour la porter tout de suite. Le bouton clavier sur chaque carte lui attribue un raccourci.</p>
+        </div>
+        <input id="voiceSearch" class="search" type="search" placeholder="Rechercher une voix" aria-label="Rechercher une voix">
+      </div>
+      <div id="voiceCats" class="chips" role="tablist"></div>
+      <div id="voiceGrid" class="voice-grid"></div>
+    </section>
+
+    <!-- LABO -->
+    <section id="tab-labo" class="tab">
+      <div class="tab-head">
+        <div>
+          <h1>Labo de voix</h1>
+          <p class="lede">Composez votre propre voix. Chaque réglage s’entend en direct, puis enregistrez-la dans « Mes voix ».</p>
+        </div>
+        <div class="row gap">
+          <select id="labBase" aria-label="Partir d’une voix"></select>
+          <button id="labReset" class="btn ghost" type="button">Repartir de zéro</button>
+        </div>
+      </div>
+      <div id="labGroups" class="lab-groups"></div>
+      <form id="labSave" class="lab-save">
+        <label for="labName">Nom de la voix</label>
+        <input id="labName" type="text" maxlength="32" placeholder="Ma voix de narrateur" required>
+        <button class="btn primary" type="submit">Enregistrer dans Mes voix</button>
+      </form>
+    </section>
+
+    <!-- SONS -->
+    <section id="tab-sons" class="tab">
+      <div class="tab-head">
+        <div>
+          <h1>Effets sonores</h1>
+          <p class="lede">Les sons partent dans la même sortie que votre voix : vos amis les entendent.</p>
+        </div>
+        <div class="row gap wrap">
+          <label class="inline-range">Volume
+            <input id="sbVol" type="range" min="0" max="1" step="0.01">
+            <output id="sbVolOut"></output>
+          </label>
+          <button id="sbStop" class="btn ghost" type="button">Tout arrêter</button>
+          <label class="btn primary file-btn">Importer des sons
+            <input id="sbImport" type="file" accept="audio/*" multiple>
+          </label>
+        </div>
+      </div>
+      <div id="padGrid" class="pad-grid"></div>
+    </section>
+
+    <!-- MICRO -->
+    <section id="tab-micro" class="tab">
+      <div class="tab-head">
+        <div>
+          <h1>Réglages micro</h1>
+          <p class="lede">Réglez votre micro comme sur une console de podcast : niveau automatique, ou chaque étage à la main.</p>
+        </div>
+        <div class="row gap wrap">
+          <select id="micPreset" aria-label="Préréglage micro"></select>
+          <button id="micPresetSave" class="btn ghost" type="button">Enregistrer le réglage</button>
+        </div>
+      </div>
+      <form id="presetForm" class="lab-save preset-form" hidden>
+        <label for="presetName">Nom du réglage</label>
+        <input id="presetName" type="text" maxlength="32" placeholder="Mon micro" required>
+        <button class="btn primary" type="submit">Enregistrer</button>
+        <button id="presetCancel" class="btn ghost" type="button">Annuler</button>
+      </form>
+
+      <div class="mic-grid">
+        <div class="panel level-panel">
+          <div class="panel-title">Niveau d’entrée</div>
+          <div class="big-meter" id="bigMeter">
+            <div class="bm-zone" title="Zone idéale pour la voix"></div>
+            <div class="bm-fill" id="bmFill"></div>
+            <div class="bm-peak" id="bmPeak"></div>
+          </div>
+          <div class="bm-scale"><span>-60</span><span>-40</span><span>-24</span><span>-12</span><span>-6</span><span>0 dB</span></div>
+          <p class="hint" id="levelHint">Parlez normalement : la barre doit rester dans la zone claire, entre -24 et -10 dB.</p>
+
+          <div class="field">
+            <div class="field-label">Mode</div>
+            <div class="seg" data-key="autoLevel">
+              <button type="button" data-v="true">Niveau auto</button>
+              <button type="button" data-v="false">Manuel</button>
+            </div>
+          </div>
+
+          <div class="auto-only">
+            <div class="field">
+              <div class="field-label">Position</div>
+              <div class="seg" data-key="position">
+                <button type="button" data-v="proche">Proche <small>&lt; 15 cm</small></button>
+                <button type="button" data-v="loin">Loin <small>15–45 cm</small></button>
+              </div>
+            </div>
+            <p class="hint">En niveau auto, le gain, le compresseur et le limiteur s’ajustent seuls pendant que vous parlez.</p>
+          </div>
+
+          <div class="manual-only">
+            <div class="field">
+              <label class="field-label" for="gain">Gain du micro</label>
+              <div class="slider-row"><input id="gain" data-key="gain" type="range" min="-20" max="36" step="0.5"><output data-for="gain"></output></div>
+            </div>
+            <div class="field">
+              <div class="field-label">Compresseur</div>
+              <div class="seg" data-key="comp">
+                <button type="button" data-v="off">Désactivé</button>
+                <button type="button" data-v="leger">Léger</button>
+                <button type="button" data-v="moyen">Moyen</button>
+                <button type="button" data-v="fort">Fort</button>
+              </div>
+            </div>
+            <div class="field">
+              <div class="field-label">Filtre passe-haut</div>
+              <div class="seg" data-key="hpf">
+                <button type="button" data-v="off">Désactivé</button>
+                <button type="button" data-v="75">75 Hz</button>
+                <button type="button" data-v="150">150 Hz</button>
+              </div>
+            </div>
+            <div class="field">
+              <div class="field-label">Présence</div>
+              <div class="seg" data-key="presence">
+                <button type="button" data-v="off">Désactivée</button>
+                <button type="button" data-v="leger">Légère</button>
+                <button type="button" data-v="fort">Forte</button>
+              </div>
+            </div>
+            <label class="switch"><input type="checkbox" data-key="limiter"><span class="switch-ui"></span><span>Limiteur (évite la saturation)</span></label>
+          </div>
+
+          <div class="field">
+            <div class="field-label">Ton</div>
+            <div class="seg" data-key="tone">
+              <button type="button" data-v="sombre">Sombre</button>
+              <button type="button" data-v="naturel">Naturel</button>
+              <button type="button" data-v="brillant">Brillant</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel eq-panel">
+          <div class="panel-title row between">
+            <span>Égaliseur 5 bandes</span>
+            <label class="switch small"><input type="checkbox" data-key="eqOn"><span class="switch-ui"></span><span>Actif</span></label>
+          </div>
+          <canvas id="eqCanvas" class="eq-canvas" aria-label="Courbe de l’égaliseur et spectre de votre voix"></canvas>
+          <div id="eqBands" class="eq-bands"></div>
+          <div class="chips" id="eqPresets"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title row between">
+            <span>Porte de bruit</span>
+            <label class="switch small"><input type="checkbox" id="gateOn"><span class="switch-ui"></span><span>Active</span></label>
+          </div>
+          <p class="hint">Coupe le micro entre vos phrases : clavier, ventilateur et respiration disparaissent.</p>
+          <div class="gate-meter"><div class="gm-fill" id="gmFill"></div><div class="gm-thr" id="gmThr"></div></div>
+          <div class="slider-row"><input id="gateThr" type="range" min="-80" max="-20" step="1" aria-label="Seuil de la porte"><output id="gateThrOut"></output></div>
+          <div class="led-row"><span class="led" id="gateLed"></span><span id="gateState">Fermée</span></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">Traitements du navigateur</div>
+          <label class="switch"><input type="checkbox" data-key="browserNS"><span class="switch-ui"></span><span>Réduction de bruit avancée</span></label>
+          <label class="switch"><input type="checkbox" data-key="echoCancel"><span class="switch-ui"></span><span>Annulation d’écho (utile sans casque)</span></label>
+          <p class="hint">Ces deux traitements rouvrent le micro quand vous les changez.</p>
+          <div class="field">
+            <label class="field-label" for="outDb">Volume de sortie</label>
+            <div class="slider-row"><input id="outDb" data-key="outDb" type="range" min="-24" max="12" step="0.5"><output data-for="outDb"></output></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">Retour casque</div>
+          <div class="field">
+            <label class="field-label" for="monitorVol">Volume du retour</label>
+            <div class="slider-row"><input id="monitorVol" data-key="monitorVol" type="range" min="0" max="1" step="0.01"><output data-for="monitorVol"></output></div>
+          </div>
+          <div class="field">
+            <label class="field-label" for="monitorMix">Mélange du retour</label>
+            <div class="mix-labels"><span>Micro</span><span>Effets sonores</span></div>
+            <input id="monitorMix" data-key="monitorMix" type="range" min="0" max="1" step="0.01">
+          </div>
+          <p class="hint">Portez un casque : avec des haut-parleurs, le micro reprendrait le retour et provoquerait un larsen.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ENREGISTREMENT -->
+    <section id="tab-rec" class="tab">
+      <div class="tab-head">
+        <div>
+          <h1>Enregistrement</h1>
+          <p class="lede">Enregistre exactement ce que les autres entendent : votre voix transformée et les effets sonores.</p>
+        </div>
+      </div>
+      <div class="panel rec-panel">
+        <button id="recBtn" class="rec-btn" type="button" aria-pressed="false"><span class="rec-dot"></span><span id="recLabel">Enregistrer</span></button>
+        <div class="rec-time" id="recTime">00:00</div>
+      </div>
+      <ol id="recList" class="rec-list"></ol>
+    </section>
+
+    <!-- ROUTAGE -->
+    <section id="tab-routage" class="tab">
+      <div class="tab-head">
+        <div>
+          <h1>Routage et raccourcis</h1>
+          <p class="lede">Choisissez votre micro et où envoyer la voix transformée.</p>
+        </div>
+        <button id="refreshDevices" class="btn ghost" type="button">Actualiser les appareils</button>
+      </div>
+
+      <div class="route">
+        <div class="route-node">
+          <div class="field-label">1. Micro</div>
+          <select id="inputSel" data-key="inputId" aria-label="Micro"></select>
+        </div>
+        <div class="route-arrow" aria-hidden="true"></div>
+        <div class="route-node accent">
+          <div class="field-label">2. Voix Studio</div>
+          <div class="route-desc">Réglages micro, voix, effets sonores</div>
+        </div>
+        <div class="route-arrow" aria-hidden="true"></div>
+        <div class="route-node">
+          <div class="field-label">3. Sortie virtuelle</div>
+          <select id="virtSel" data-key="virtualOutId" aria-label="Sortie virtuelle"></select>
+          <div class="field-label sub">Retour casque</div>
+          <select id="monSel" data-key="monitorOutId" aria-label="Sortie du retour casque"></select>
+        </div>
+      </div>
+
+      <div class="panel steps">
+        <div class="panel-title">Utiliser la voix dans Discord, OBS ou un jeu</div>
+        <ol>
+          <li>Installez un câble audio virtuel gratuit, par exemple VB-CABLE (vb-audio.com). Il crée deux appareils : « CABLE Input » et « CABLE Output ».</li>
+          <li>Ici, choisissez <b>CABLE Input</b> comme sortie virtuelle. Voix Studio le détecte tout seul quand il est installé.</li>
+          <li>Dans Discord, OBS ou votre jeu, choisissez <b>CABLE Output</b> comme micro.</li>
+          <li>Laissez cette fenêtre ouverte : la transformation s’arrête si vous la fermez. Elle peut rester en arrière-plan.</li>
+        </ol>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Raccourcis clavier</div>
+        <p class="hint">Les raccourcis fonctionnent quand la fenêtre Voix Studio est active. Les voix et les sons ont leurs propres raccourcis sur leurs cartes.</p>
+        <div class="keys">
+          <div class="key-row"><span>Couper / rétablir le micro</span><button class="keycap" data-hk="mute" type="button"></button></div>
+          <div class="key-row"><span>Activer / désactiver la transformation</span><button class="keycap" data-hk="voice" type="button"></button></div>
+          <div class="key-row"><span>M’écouter</span><button class="keycap" data-hk="monitor" type="button"></button></div>
+          <div class="key-row"><span>Arrêter tous les sons</span><button class="keycap" data-hk="stopSounds" type="button"></button></div>
+          <div class="key-row">
+            <label class="switch"><input type="checkbox" data-key="pttMode"><span class="switch-ui"></span><span>Appuyer pour parler</span></label>
+            <button class="keycap" data-hk="ptt" type="button"></button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Mises à jour</div>
+        <div class="row between wrap gap">
+          <div>
+            <div>Version installée : <span id="appVersion" class="mono">—</span></div>
+            <p class="hint" id="updateText">Voix Studio cherche les mises à jour au démarrage puis toutes les 30 minutes, et les installe tout seul.</p>
+          </div>
+          <button id="updateCheck" class="btn ghost" type="button">Rechercher maintenant</button>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<footer class="rack">
+  <div class="rack-voice">
+    <span class="rack-label">Voix</span>
+    <span id="rackVoice" class="rack-value">Voix naturelle</span>
+  </div>
+  <div class="rack-meter">
+    <span class="rack-label">Entrée</span>
+    <div class="meter"><div class="meter-fill" id="mIn"></div></div>
+  </div>
+  <div class="rack-meter">
+    <span class="rack-label">Sortie</span>
+    <div class="meter"><div class="meter-fill" id="mOut"></div></div>
+  </div>
+  <div class="rack-stat"><span class="led" id="rackGate"></span><span class="rack-label">Porte</span></div>
+  <div class="rack-stat"><span class="rack-label">Compression</span><span id="rackGr" class="rack-value mono">0.0 dB</span></div>
+  <div class="rack-stat"><span class="rack-label">Niveau auto</span><span id="rackAgc" class="rack-value mono">—</span></div>
+</footer>
+
+<div id="toast" class="toast" role="status" hidden></div>
+
+<script src="js/worklets.js"></script>
+<script src="js/voices.js"></script>
+<script src="js/sounds.js"></script>
+<script src="js/store.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
