@@ -2,6 +2,8 @@
 const { app, BrowserWindow, ipcMain, session, shell, Menu } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
+const audioDevices = require('./audio-devices');
+const soundSources = require('./sound-sources');
 
 const CHECK_EVERY = 30 * 60 * 1000;
 let win = null;
@@ -66,6 +68,26 @@ ipcMain.handle('update:status', () => updateStatus);
 ipcMain.handle('update:check', () => checkForUpdates());
 ipcMain.on('update:install', () => {
   if (updateStatus.state === 'ready') autoUpdater.quitAndInstall(false, true);
+});
+
+// Micro virtuel de Windows
+ipcMain.handle('vmic:status', () => audioDevices.status());
+ipcMain.handle('vmic:enable', () => audioDevices.makeDefault());
+ipcMain.handle('vmic:restore', () => audioDevices.restoreDefault());
+ipcMain.handle('vmic:install', () => audioDevices.installCable());
+
+// Sons d'autres soundboards
+ipcMain.handle('sounds:scan', () => soundSources.scan());
+ipcMain.handle('sounds:pickFolder', () => soundSources.pickFolder(win));
+ipcMain.handle('sounds:read', (_e, p) => soundSources.read(p));
+
+// À la fermeture, Windows retrouve le micro par défaut d'avant Voix Studio
+let restored = false;
+app.on('before-quit', (e) => {
+  if (restored || !audioDevices.readPrevious()) return;
+  e.preventDefault();
+  restored = true;
+  audioDevices.restoreDefault().catch(() => {}).finally(() => app.quit());
 });
 
 app.whenReady().then(() => {

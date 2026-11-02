@@ -7,4 +7,15 @@ contextBridge.exposeInMainWorld('desktop', {
   checkUpdates: () => ipcRenderer.invoke('update:check'),
   installUpdate: () => ipcRenderer.send('update:install'),
   onUpdate: (fn) => ipcRenderer.on('update', (_e, status) => fn(status)),
+  vmic: {
+    status: () => ipcRenderer.invoke('vmic:status'),
+    enable: () => ipcRenderer.invoke('vmic:enable'),
+    restore: () => ipcRenderer.invoke('vmic:restore'),
+    install: () => ipcRenderer.invoke('vmic:install'),
+  },
+  sounds: {
+    scan: () => ipcRenderer.invoke('sounds:scan'),
+    pickFolder: () => ipcRenderer.invoke('sounds:pickFolder'),
+    read: (p) => ipcRenderer.invoke('sounds:read', p),
+  },
 });

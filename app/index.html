@@ -97,11 +97,14 @@
             <output id="sbVolOut"></output>
           </label>
           <button id="sbStop" class="btn ghost" type="button">Tout arrêter</button>
+          <button id="sbScan" class="btn ghost" type="button" hidden>Récupérer mes soundboards</button>
+          <button id="sbFolder" class="btn ghost" type="button" hidden>Importer un dossier</button>
           <label class="btn primary file-btn">Importer des sons
             <input id="sbImport" type="file" accept="audio/*" multiple>
           </label>
         </div>
       </div>
+      <div id="padCats" class="chips"></div>
       <div id="padGrid" class="pad-grid"></div>
     </section>
 
@@ -286,6 +289,17 @@
           <select id="virtSel" data-key="virtualOutId" aria-label="Sortie virtuelle"></select>
           <div class="field-label sub">Retour casque</div>
           <select id="monSel" data-key="monitorOutId" aria-label="Sortie du retour casque"></select>
+        </div>
+      </div>
+
+      <div class="panel" id="vmicPanel" hidden>
+        <div class="panel-title">Micro virtuel de Windows</div>
+        <div class="led-row"><span class="led" id="vmicLed"></span><span id="vmicText">Vérification des périphériques…</span></div>
+        <label class="switch"><input type="checkbox" id="winDefault"><span class="switch-ui"></span><span>Faire de Voix Studio le micro par défaut de Windows</span></label>
+        <label class="switch"><input type="checkbox" id="autoStart"><span class="switch-ui"></span><span>Activer le micro dès l’ouverture de Voix Studio</span></label>
+        <p class="hint">Discord, OBS et les jeux réglés sur le micro « Par défaut » entendent alors votre voix transformée. Votre micro habituel redevient le micro par défaut quand vous fermez Voix Studio.</p>
+        <div class="row gap wrap vmic-actions">
+          <button id="vmicInstall" class="btn primary" type="button" hidden>Installer le micro virtuel</button>
         </div>
       </div>
 

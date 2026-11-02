@@ -22,6 +22,8 @@
     "files": [
       "main.js",
       "preload.js",
+      "audio-devices.js",
+      "sound-sources.js",
       "app/**/*",
       "build/icon.png"
     ],

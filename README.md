@@ -33,6 +33,17 @@ Cette commande passe la version de 1.0.0 à 1.0.1, crée le tag `v1.0.1` et le p
 
 Le dépôt GitHub doit être **public** (`frnmathis71-blip/voix-studio`, réglé dans `package.json` sous `build.publish`) pour que les installations puissent lire les Releases sans identifiant.
 
-## Envoyer la voix dans Discord, OBS ou un jeu
+## Micro par défaut de Windows
 
-Installez un câble audio virtuel (par exemple VB-CABLE). Dans Voix Studio, choisissez « CABLE Input » comme sortie virtuelle. Dans l'autre logiciel, choisissez « CABLE Output » comme micro.
+Dans Routage et raccourcis, « Installer le micro virtuel » télécharge le pilote officiel VB-CABLE (vb-audio.com) et lance son installateur. Ensuite, Voix Studio :
+
+- envoie la voix transformée dans « CABLE Input » ;
+- fait de « CABLE Output » le micro par défaut de Windows au lancement, pour que Discord, OBS et les jeux réglés sur « Par défaut » l'entendent ;
+- rend le micro par défaut d'avant à la fermeture (gardé dans `micro-precedent.json`, même après un plantage) ;
+- choisit toujours un micro physique comme source, jamais un micro virtuel (Voicemod, MOTIV Mix, VB-CABLE…).
+
+Le changement de périphérique par défaut passe par l'interface COM `IPolicyConfig` de Windows, compilée à la volée par PowerShell (`audio-devices.js`).
+
+## Reprendre les sons d'autres soundboards
+
+« Récupérer mes soundboards » (onglet Effets sonores) importe les sons de Voicemod (cache de VoicemodV3) et de Soundpad. Les sons chiffrés de la bibliothèque Voicemod sont ignorés. « Importer un dossier » reprend tous les fichiers audio d'un dossier.

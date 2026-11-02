@@ -64,6 +64,8 @@ button { cursor: pointer; }
   padding: 8px 14px; border-radius: 999px; border: 0; background: var(--violet); color: #12101f; font-weight: 700;
 }
 .preset-form { margin-bottom: 18px; }
+.vmic-actions { margin-top: 12px; }
+.pad-rename { width: 100%; font: 700 15px var(--display); padding: 4px 6px; }
 .top-toggles { display: flex; align-items: center; gap: 18px; margin-left: auto; flex-wrap: wrap; }
 
 .mute {

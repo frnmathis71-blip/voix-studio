@@ -54,7 +54,13 @@
     pttHeld: false,
     userSounds: [],
     playing: {},
+    padCat: 'all',
+    winDefault: store.get('winDefault', true),
+    autoStart: store.get('autoStart', true),
   };
+
+  // Micros virtuels (le nôtre ou celui d'un autre logiciel) : jamais une source pour Voix Studio
+  const VIRTUAL_MIC = /voicemod|virtual|cable output|vb-audio|voicemeeter|steam streaming/i;
 
   // ---------- Utilitaires
   function toast(msg) {
@@ -231,7 +237,7 @@
       updateMute();
       await refreshDevices();
       await engine.setOutputs(effectiveOutputs());
-      notice('');
+      notice(vmicNotice());
     } catch (err) {
       console.error(err);
       if (engine.ctx) await engine.stop().catch(() => {});
@@ -549,10 +555,61 @@
     Object.keys(state.playing).forEach((id) => { state.playing[id].stop(); finishPad(id); });
   }
 
+  const padSource = (s) => (s.data ? s.source || 'Importés' : 'Synthèse');
+
+  function renderPadCats() {
+    const wrap = $('#padCats');
+    const sources = Array.from(new Set(allPads().map(padSource)));
+    wrap.innerHTML = '';
+    if (sources.length < 2) { state.padCat = 'all'; return; }
+    if (state.padCat !== 'all' && !sources.includes(state.padCat)) state.padCat = 'all';
+    ['all', ...sources].forEach((src) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'chip' + (state.padCat === src ? ' on' : '');
+      const n = src === 'all' ? allPads().length : allPads().filter((s) => padSource(s) === src).length;
+      b.textContent = (src === 'all' ? 'Tous' : src) + ' · ' + n;
+      b.addEventListener('click', () => { state.padCat = src; renderPads(); });
+      wrap.appendChild(b);
+    });
+  }
+
+  function startRename(pad, s) {
+    const nameEl = pad.querySelector('.pad-name');
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'pad-rename';
+    input.maxLength = 40;
+    input.value = s.name;
+    input.setAttribute('aria-label', 'Nom du son');
+    nameEl.replaceWith(input);
+    input.addEventListener('click', (e) => e.stopPropagation());
+    input.focus();
+    input.select();
+    let done = false;
+    const finish = async (save) => {
+      if (done) return;
+      done = true;
+      const name = input.value.trim();
+      if (save && name && name !== s.name) {
+        s.name = name;
+        await VS.soundDb.put(s);
+      }
+      renderPads();
+    };
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') finish(true);
+      if (e.key === 'Escape') finish(false);
+    });
+    input.addEventListener('blur', () => finish(true));
+  }
+
   function renderPads() {
+    renderPadCats();
     const grid = $('#padGrid');
     grid.innerHTML = '';
-    allPads().forEach((s) => {
+    allPads().filter((s) => !state.padCat || state.padCat === 'all' || padSource(s) === state.padCat).forEach((s) => {
       const pad = document.createElement('div');
       pad.className = 'pad';
       pad.dataset.id = s.id;
@@ -561,9 +618,15 @@
       pad.style.setProperty('--h', s.hue);
       pad.innerHTML = '<div class="pad-name"></div><div class="pad-foot"><span class="voice-tag"></span><span class="row gap"></span></div><div class="pad-progress"></div>';
       pad.querySelector('.pad-name').textContent = s.name;
-      pad.querySelector('.voice-tag').textContent = s.data ? 'Importé' : 'Synthèse';
+      pad.querySelector('.voice-tag').textContent = padSource(s);
       const actions = pad.querySelector('.pad-foot .row');
       if (s.data) {
+        const ren = document.createElement('button');
+        ren.type = 'button';
+        ren.className = 'mini-btn';
+        ren.textContent = 'Renommer';
+        ren.addEventListener('click', (e) => { e.stopPropagation(); startRename(pad, s); });
+        actions.appendChild(ren);
         const del = document.createElement('button');
         del.type = 'button';
         del.className = 'mini-btn';
@@ -633,6 +696,8 @@
   }
 
   async function onMicChange(key) {
+    // Sur le bureau, « par défaut » pourrait désigner notre propre micro virtuel : on choisit le vrai micro
+    if (key === 'inputId' && !state.mic.inputId && window.desktop) await resolveRealMic(true);
     saveMic();
     renderMic();
     if (!engine.running) return;
@@ -964,7 +1029,9 @@
       });
       sel.value = list.some((d) => d.deviceId === value) ? value : '';
     };
-    fill($('#inputSel'), ins, 'Micro par défaut de Windows', m.inputId);
+    // Le câble virtuel ne peut pas servir d'entrée : la voix tournerait en boucle
+    const realIns = ins.filter((d) => !/cable output|vb-audio virtual/i.test(d.label));
+    fill($('#inputSel'), realIns, window.desktop ? 'Choisir mon micro automatiquement' : 'Micro par défaut de Windows', m.inputId);
     fill($('#virtSel'), outs, 'Désactivée', m.virtualOutId || '');
     fill($('#monSel'), outs, 'Sortie par défaut (casque)', m.monitorOutId);
     if (!outs.length || !('setSinkId' in HTMLMediaElement.prototype)) {
@@ -1103,6 +1170,7 @@
     notice('Le micro est éteint. Cliquez sur « Activer le micro » en haut pour commencer.');
     initUpdates();
     requestAnimationFrame(loop);
+    initDesktop();
   }
 
   // ---------- Mises à jour (application de bureau uniquement)
@@ -1122,6 +1190,166 @@
     };
     text.textContent = msgs[s.state] || msgs.idle;
   }
+
+  // ---------- Micro virtuel de Windows (application de bureau uniquement)
+  let vmic = null;
+
+  async function audioInputs() {
+    const list = async () => (await navigator.mediaDevices.enumerateDevices())
+      .filter((d) => d.kind === 'audioinput' && d.deviceId !== 'default' && d.deviceId !== 'communications');
+    let ins = await list();
+    if (!ins.some((d) => d.label)) {
+      try {
+        const s = await navigator.mediaDevices.getUserMedia({ audio: true });
+        s.getTracks().forEach((t) => t.stop());
+      } catch (e) { /* sans autorisation, pas de noms */ }
+      ins = await list();
+    }
+    return ins;
+  }
+
+  // Choisit le vrai micro de l'utilisateur si aucun n'est choisi, ou si le choix actuel est un micro virtuel
+  async function resolveRealMic(force) {
+    const ins = await audioInputs();
+    const current = ins.find((d) => d.deviceId === state.mic.inputId);
+    if (!force && current && !VIRTUAL_MIC.test(current.label)) return;
+    const name = vmic ? vmic.realMicName : '';
+    const pick = (name && ins.find((d) => d.label && (d.label === name || d.label.startsWith(name) || name.startsWith(d.label))))
+      || ins.find((d) => d.label && !VIRTUAL_MIC.test(d.label));
+    if (pick) {
+      state.mic.inputId = pick.deviceId;
+      saveMic();
+    }
+  }
+
+  function vmicNotice() {
+    return vmic && !vmic.installed
+      ? 'Pour que Discord, OBS ou vos jeux entendent votre voix transformée, installez le micro virtuel dans Routage et raccourcis.'
+      : '';
+  }
+
+  function renderVmic() {
+    const led = $('#vmicLed');
+    const text = $('#vmicText');
+    $('#winDefault').checked = state.winDefault;
+    $('#autoStart').checked = state.autoStart;
+    $('#vmicInstall').hidden = !vmic || vmic.installed;
+    led.classList.toggle('on', !!(vmic && vmic.isDefault));
+    if (!vmic) text.textContent = 'Impossible de lire les périphériques audio de Windows.';
+    else if (!vmic.installed) text.textContent = 'Micro virtuel non installé : Discord et les jeux ne peuvent pas encore entendre Voix Studio.';
+    else if (vmic.isDefault) text.textContent = '« ' + vmic.cableName + ' » est le micro par défaut de Windows : il diffuse votre voix transformée.';
+    else text.textContent = 'Micro virtuel installé. Dans Discord, choisissez « ' + vmic.cableName + ' » comme micro, ou activez l’option ci-dessous.';
+  }
+
+  async function refreshVmic() {
+    try { vmic = await window.desktop.vmic.status(); } catch (e) { vmic = null; }
+    renderVmic();
+  }
+
+  async function applyWinDefault() {
+    if (!vmic || !vmic.installed) return;
+    try {
+      if (state.winDefault && !vmic.isDefault) await window.desktop.vmic.enable();
+      if (!state.winDefault) await window.desktop.vmic.restore();
+    } catch (e) {
+      toast('Windows a refusé de changer le micro par défaut');
+    }
+    await refreshVmic();
+  }
+
+  async function initDesktop() {
+    const d = window.desktop;
+    if (!d) return;
+    $('#vmicPanel').hidden = false;
+    $('#sbScan').hidden = false;
+    $('#sbFolder').hidden = false;
+    await refreshVmic();
+    await resolveRealMic(false);
+    // Sans sortie vers le câble, le micro virtuel resterait muet : on le reconnecte
+    if (vmic && vmic.installed && !state.mic.virtualOutId) { state.mic.virtualOutId = null; saveMic(); }
+    await refreshDevices().catch(() => {});
+    await applyWinDefault();
+    if (vmicNotice()) notice(vmicNotice());
+    if (state.autoStart && !engine.running) power.click();
+  }
+
+  $('#winDefault').addEventListener('change', (e) => {
+    state.winDefault = e.target.checked;
+    store.set('winDefault', state.winDefault);
+    applyWinDefault();
+  });
+  $('#autoStart').addEventListener('change', (e) => {
+    state.autoStart = e.target.checked;
+    store.set('autoStart', state.autoStart);
+  });
+  $('#vmicInstall').addEventListener('click', async () => {
+    const btn = $('#vmicInstall');
+    btn.disabled = true;
+    btn.textContent = 'Téléchargement et installation…';
+    $('#vmicText').textContent = 'Acceptez la demande de Windows, puis cliquez sur « Install Driver » dans la fenêtre VB-CABLE.';
+    try {
+      vmic = await window.desktop.vmic.install();
+    } catch (e) {
+      toast(e.message || 'Installation impossible');
+      await refreshVmic();
+    }
+    btn.disabled = false;
+    btn.textContent = 'Installer le micro virtuel';
+    renderVmic();
+    if (vmic && vmic.installed) {
+      state.mic.virtualOutId = null;
+      saveMic();
+      await refreshDevices();
+      if (engine.running) await engine.setOutputs(effectiveOutputs());
+      await applyWinDefault();
+      notice('');
+      toast('Micro virtuel installé. Si Discord ne le voit pas, redémarrez le PC.');
+    }
+  });
+
+  // Import des sons d'autres soundboards
+  const decodeCtx = new OfflineAudioContext(1, 1, 44100);
+
+  async function importSounds(files) {
+    const existing = new Set(state.userSounds.map((s) => s.origin).filter(Boolean));
+    const todo = files.filter((f) => !existing.has(f.path));
+    if (!files.length) { toast('Aucun son trouvé'); return; }
+    if (!todo.length) { toast('Ces sons sont déjà dans Voix Studio'); return; }
+    let added = 0;
+    for (const f of todo) {
+      try {
+        const bytes = await window.desktop.sounds.read(f.path);
+        const data = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+        await decodeCtx.decodeAudioData(data.slice(0));
+        const rec = {
+          id: 'u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+          name: f.name,
+          hue: Math.floor(Math.random() * 360),
+          data,
+          origin: f.path,
+          source: f.source,
+        };
+        await VS.soundDb.put(rec);
+        state.userSounds.push(rec);
+        added++;
+        if (added % 5 === 0) toast('Import en cours : ' + added + ' / ' + todo.length);
+      } catch (e) { /* fichier illisible : ignoré */ }
+    }
+    renderPads();
+    const skipped = todo.length - added;
+    toast(added + ' son' + (added > 1 ? 's' : '') + ' importé' + (added > 1 ? 's' : '') + (skipped ? ', ' + skipped + ' illisible' + (skipped > 1 ? 's' : '') : ''));
+  }
+
+  $('#sbScan').addEventListener('click', async () => {
+    const { files, protectedBy } = await window.desktop.sounds.scan();
+    await importSounds(files);
+    const prot = Object.keys(protectedBy).map((k) => protectedBy[k] + ' sons de la bibliothèque ' + k + ' sont protégés et ne peuvent pas être repris');
+    if (prot.length) notice(prot.join('. ') + '. Pour les retrouver, importez les fichiers d’origine avec « Importer un dossier ».');
+  });
+  $('#sbFolder').addEventListener('click', async () => {
+    const files = await window.desktop.sounds.pickFolder();
+    if (files.length) await importSounds(files);
+  });
 
   async function initUpdates() {
     const d = window.desktop;
