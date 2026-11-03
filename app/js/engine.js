@@ -61,7 +61,7 @@ class Engine {
     this.running = false;
     if (this.stream) this.stream.getTracks().forEach((t) => t.stop());
     this.stream = null;
-    if (this.virtEl) { this.virtEl.pause(); this.virtEl.srcObject = null; }
+    this.closeMonitorBridge();
     if (this.recorder && this.recorder.state !== 'inactive') this.recorder.stop();
     await this.ctx.close();
     this.ctx = null;
@@ -163,22 +163,49 @@ class Engine {
 
     N.postAn = c.createAnalyser(); N.postAn.fftSize = 2048;
     N.master.connect(N.postAn);
+    // Copie pour l'enregistrement
     N.virtDest = c.createMediaStreamDestination();
     N.master.connect(N.virtDest);
+    // Sortie virtuelle : la destination du contexte, réglée sur le câble virtuel.
+    // C'est le chemin le plus court, sans tampon de lecture entre le moteur et le câble.
+    N.toVirt = gain(0);
+    N.master.connect(N.toVirt).connect(c.destination);
 
     // Effets sonores : vers la sortie virtuelle et le retour casque
     N.sb = gain(0.8);
     N.sbAn = c.createAnalyser(); N.sbAn.fftSize = 512;
     N.sb.connect(N.virtDest);
+    N.sb.connect(N.toVirt);
     N.sb.connect(N.sbAn);
 
-    // Retour casque (sortie la plus directe : la destination du contexte)
+    // Retour casque : direct quand il n'y a pas de sortie virtuelle,
+    // sinon par un second contexte branché sur le casque
     N.monMic = gain(1);
     N.monSb = gain(1);
     N.monSum = gain(0);
     N.master.connect(N.monMic).connect(N.monSum);
     N.sb.connect(N.monSb).connect(N.monSum);
-    N.monSum.connect(c.destination);
+    N.monDirect = gain(1);
+    N.monSum.connect(N.monDirect).connect(c.destination);
+    N.monDest = c.createMediaStreamDestination();
+    N.monSum.connect(N.monDest);
+  }
+
+  async openMonitorBridge(sinkId) {
+    if (!this.monCtx) {
+      this.monCtx = new AudioContext({ latencyHint: 'interactive' });
+      this.monCtx.createMediaStreamSource(this.N.monDest.stream).connect(this.monCtx.destination);
+    }
+    if (this.monCtx.setSinkId) {
+      try { await this.monCtx.setSinkId(sinkId || ''); } catch (e) { this.emit('warn', 'Impossible de choisir la sortie du retour casque.'); }
+    }
+    await this.monCtx.resume();
+  }
+
+  closeMonitorBridge() {
+    if (!this.monCtx) return;
+    this.monCtx.close();
+    this.monCtx = null;
   }
 
   async openMic() {
@@ -210,23 +237,24 @@ class Engine {
 
   async setOutputs(m) {
     if (!this.ctx) return;
-    // Retour casque
-    if (this.ctx.setSinkId) {
-      try { await this.ctx.setSinkId(m.monitorOutId || ''); } catch (e) { this.emit('warn', 'Impossible de choisir la sortie du retour casque.'); }
+    const N = this.N;
+    if (m.virtualOutId) {
+      // Le moteur joue directement dans le câble virtuel ; le casque passe par le second contexte
+      try {
+        await this.ctx.setSinkId(m.virtualOutId);
+        this.ramp(N.toVirt.gain, 1, 0.01);
+        this.ramp(N.monDirect.gain, 0, 0.01);
+        await this.openMonitorBridge(m.monitorOutId);
+        return;
+      } catch (e) {
+        this.emit('warn', 'Sortie virtuelle introuvable. Vérifiez qu’elle est toujours branchée.');
+      }
     }
-    // Sortie virtuelle (vers un câble audio virtuel)
-    if (!this.virtEl) this.virtEl = new Audio();
-    const el = this.virtEl;
-    if (!m.virtualOutId) {
-      el.pause();
-      el.srcObject = null;
-      return;
-    }
-    el.srcObject = this.N.virtDest.stream;
-    if (el.setSinkId) {
-      try { await el.setSinkId(m.virtualOutId); } catch (e) { this.emit('warn', 'Sortie virtuelle introuvable. Vérifiez qu’elle est toujours branchée.'); }
-    }
-    try { await el.play(); } catch (e) { /* relancé au prochain clic */ }
+    // Pas de sortie virtuelle : le moteur joue seulement le retour casque
+    this.ramp(N.toVirt.gain, 0, 0.01);
+    this.ramp(N.monDirect.gain, 1, 0.01);
+    this.closeMonitorBridge();
+    try { await this.ctx.setSinkId(m.monitorOutId || ''); } catch (e) { this.emit('warn', 'Impossible de choisir la sortie du retour casque.'); }
   }
 
   ramp(param, value, k = 0.03) {

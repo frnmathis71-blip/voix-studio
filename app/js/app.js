@@ -1008,7 +1008,10 @@
     const m = state.mic;
 
     if (m.virtualOutId === null && outs.some((d) => d.label)) {
-      const cable = outs.find((d) => /cable input|vb-audio|voicemeeter input|virtual/i.test(d.label));
+      // Par ordre de préférence ; « virtual » seul attraperait aussi les sorties d'autres logiciels (MOTIV Mix…)
+      const cable = [/^cable input/i, /vb-audio virtual cable/i, /voicemeeter input/i]
+        .map((re) => outs.find((d) => re.test(d.label)))
+        .find(Boolean);
       m.virtualOutId = cable ? cable.deviceId : '';
       saveMic();
       if (cable) toast('Câble virtuel détecté : ' + cable.label);
