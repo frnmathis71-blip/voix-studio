@@ -1237,6 +1237,15 @@
     $('#winDefault').checked = state.winDefault;
     $('#autoStart').checked = state.autoStart;
     $('#vmicInstall').hidden = !vmic || vmic.installed;
+    $('#cableLatencyField').hidden = !vmic || !vmic.installed || !vmic.latency;
+    if (vmic && vmic.latency) {
+      const sel = $('#cableLatency');
+      if (document.activeElement !== sel) sel.value = String(vmic.latency);
+      const ms = Math.round((vmic.latency / vmic.sampleRate) * 1000);
+      $('#cableLatencyHint').textContent = 'Réglage actuel : ' + vmic.latency + ' échantillons, soit ' + ms + ' ms. ' +
+        (vmic.latency > 2048 ? 'Baissez-le pour réduire le décalage de votre voix. ' : '') +
+        'Windows demande une autorisation, puis il faut redémarrer le PC.';
+    }
     led.classList.toggle('on', !!(vmic && vmic.isDefault));
     if (!vmic) text.textContent = 'Impossible de lire les périphériques audio de Windows.';
     else if (!vmic.installed) text.textContent = 'Micro virtuel non installé : Discord et les jeux ne peuvent pas encore entendre Voix Studio.';
@@ -1248,6 +1257,31 @@
     try { vmic = await window.desktop.vmic.status(); } catch (e) { vmic = null; }
     renderVmic();
   }
+
+  // Le micro virtuel s'affiche « Voix Studio » dans Windows, Discord et les jeux
+  async function renameCable() {
+    if (!vmic || !vmic.installed || vmic.renamed) return;
+    try {
+      await window.desktop.vmic.rename();
+      await refreshVmic();
+      toast('Le micro virtuel s’appelle maintenant « Voix Studio »');
+    } catch (e) { /* le nom d'origine reste utilisable */ }
+  }
+
+  $('#cableLatencyApply').addEventListener('click', async () => {
+    const btn = $('#cableLatencyApply');
+    btn.disabled = true;
+    btn.textContent = 'Acceptez la demande de Windows…';
+    try {
+      await window.desktop.vmic.setLatency(Number($('#cableLatency').value));
+      await refreshVmic();
+      notice('Délai du micro virtuel enregistré. Redémarrez le PC pour l’appliquer.');
+    } catch (e) {
+      toast(e.message || 'Le délai n’a pas été changé');
+    }
+    btn.disabled = false;
+    btn.textContent = 'Appliquer';
+  });
 
   async function applyWinDefault() {
     if (!vmic || !vmic.installed) return;
@@ -1271,6 +1305,7 @@
     // Sans sortie vers le câble, le micro virtuel resterait muet : on le reconnecte
     if (vmic && vmic.installed && !state.mic.virtualOutId) { state.mic.virtualOutId = null; saveMic(); }
     await refreshDevices().catch(() => {});
+    await renameCable();
     await applyWinDefault();
     if (vmicNotice()) notice(vmicNotice());
     if (state.autoStart && !engine.running) power.click();
@@ -1304,6 +1339,7 @@
       saveMic();
       await refreshDevices();
       if (engine.running) await engine.setOutputs(effectiveOutputs());
+      await renameCable();
       await applyWinDefault();
       notice('');
       toast('Micro virtuel installé. Si Discord ne le voit pas, redémarrez le PC.');

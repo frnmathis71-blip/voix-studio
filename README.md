@@ -40,7 +40,9 @@ Dans Routage et raccourcis, « Installer le micro virtuel » télécharge le pil
 - envoie la voix transformée dans « CABLE Input » ;
 - fait de « CABLE Output » le micro par défaut de Windows au lancement, pour que Discord, OBS et les jeux réglés sur « Par défaut » l'entendent ;
 - rend le micro par défaut d'avant à la fermeture (gardé dans `micro-precedent.json`, même après un plantage) ;
-- choisit toujours un micro physique comme source, jamais un micro virtuel (Voicemod, MOTIV Mix, VB-CABLE…).
+- choisit toujours un micro physique comme source, jamais un micro virtuel (Voicemod, MOTIV Mix, VB-CABLE…) ;
+- renomme « CABLE Output » en « Voix Studio » : Discord et les jeux affichent « Voix Studio (VB-Audio Virtual Cable) ». La partie entre parenthèses vient du pilote et ne change pas ;
+- propose de régler le délai du câble (`VBAudioCableWDM_Latency` dans `HKLM\SOFTWARE\VB-Audio\Cable`). VB-CABLE est livré à 7 168 échantillons, soit environ 150 ms à 48 kHz ; 2 048 (43 ms) est un bon compromis. Le changement demande les droits administrateur et un redémarrage.
 
 Le changement de périphérique par défaut passe par l'interface COM `IPolicyConfig` de Windows, compilée à la volée par PowerShell (`audio-devices.js`).
 

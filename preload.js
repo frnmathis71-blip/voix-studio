@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld('desktop', {
     enable: () => ipcRenderer.invoke('vmic:enable'),
     restore: () => ipcRenderer.invoke('vmic:restore'),
     install: () => ipcRenderer.invoke('vmic:install'),
+    rename: () => ipcRenderer.invoke('vmic:rename'),
+    setLatency: (samples) => ipcRenderer.invoke('vmic:setLatency', samples),
   },
   sounds: {
     scan: () => ipcRenderer.invoke('sounds:scan'),

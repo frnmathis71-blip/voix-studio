@@ -301,6 +301,20 @@
         <div class="row gap wrap vmic-actions">
           <button id="vmicInstall" class="btn primary" type="button" hidden>Installer le micro virtuel</button>
         </div>
+        <div class="field" id="cableLatencyField" hidden>
+          <label class="field-label" for="cableLatency">Délai du micro virtuel</label>
+          <div class="row gap wrap">
+            <select id="cableLatency">
+              <option value="512">11 ms : le plus rapide, peut grésiller</option>
+              <option value="1024">21 ms : très rapide</option>
+              <option value="2048">43 ms : recommandé</option>
+              <option value="3072">64 ms : prudent</option>
+              <option value="7168">150 ms : réglage d’origine de VB-CABLE</option>
+            </select>
+            <button id="cableLatencyApply" class="btn" type="button">Appliquer</button>
+          </div>
+          <p class="hint" id="cableLatencyHint"></p>
+        </div>
       </div>
 
       <div class="panel steps">

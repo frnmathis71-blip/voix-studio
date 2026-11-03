@@ -14,13 +14,13 @@ namespace VoixStudio {
   [StructLayout(LayoutKind.Sequential)] public struct PropertyKey { public Guid fmtid; public int pid; }
   [StructLayout(LayoutKind.Sequential)] public struct PropVariant { public ushort vt; public ushort r1, r2, r3; public IntPtr p; public IntPtr p2; }
   [Guid("886d8eeb-8cf2-4446-8d02-cdba1dbdcf99"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-  public interface IPropertyStore { void GetCount(out int c); void GetAt(int i, out PropertyKey k); void GetValue(ref PropertyKey k, out PropVariant v); }
+  public interface IPropertyStore { void GetCount(out int c); void GetAt(int i, out PropertyKey k); void GetValue(ref PropertyKey k, out PropVariant v); void SetValue(ref PropertyKey k, ref PropVariant v); void Commit(); }
   [Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
   public interface IMMDevice { void Activate(ref Guid iid, int ctx, IntPtr p, [MarshalAs(UnmanagedType.IUnknown)] out object o); void OpenPropertyStore(int access, out IPropertyStore ps); void GetId([MarshalAs(UnmanagedType.LPWStr)] out string id); void GetState(out int s); }
   [Guid("0BD7A1BE-7A1A-44DB-8397-CC5392387B5E"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
   public interface IMMDeviceCollection { void GetCount(out int n); void Item(int i, out IMMDevice d); }
   [Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-  public interface IMMDeviceEnumerator { void EnumAudioEndpoints(int flow, int mask, out IMMDeviceCollection c); [PreserveSig] int GetDefaultAudioEndpoint(int flow, int role, out IMMDevice d); }
+  public interface IMMDeviceEnumerator { void EnumAudioEndpoints(int flow, int mask, out IMMDeviceCollection c); [PreserveSig] int GetDefaultAudioEndpoint(int flow, int role, out IMMDevice d); void GetDevice([MarshalAs(UnmanagedType.LPWStr)] string id, out IMMDevice d); }
   [ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")] public class MMDeviceEnumerator {}
   [Guid("f8679f50-850a-41cf-9c72-430f290290c8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
   public interface IPolicyConfig { void M1(); void M2(); void M3(); void M4(); void M5(); void M6(); void M7(); void M8(); void M9(); void M10(); [PreserveSig] int SetDefaultEndpoint([MarshalAs(UnmanagedType.LPWStr)] string id, int role); void M12(); }
@@ -57,11 +57,20 @@ namespace VoixStudio {
       IPolicyConfig p = (IPolicyConfig)new PolicyConfigClient();
       foreach (char r in roles) Marshal.ThrowExceptionForHR(p.SetDefaultEndpoint(id, r - '0'));
     }
+    // Change la description du périphérique (« CABLE Output » → « Voix Studio »), comme le panneau Son
+    public static void Rename(string id, string name) {
+      IMMDeviceEnumerator e = (IMMDeviceEnumerator)new MMDeviceEnumerator();
+      IMMDevice d; e.GetDevice(id, out d);
+      IPropertyStore ps; d.OpenPropertyStore(2, out ps);
+      PropertyKey k = new PropertyKey(); k.fmtid = new Guid("a45c254e-df1c-4efd-8020-67d146a850e0"); k.pid = 2;
+      PropVariant v = new PropVariant(); v.vt = 31; v.p = Marshal.StringToCoTaskMemUni(name);
+      try { ps.SetValue(ref k, ref v); ps.Commit(); } finally { Marshal.FreeCoTaskMem(v.p); }
+    }
   }
 }`;
 
 // La DLL compilée est mise en cache : la compilation prend une seconde, le chargement presque rien.
-const DLL_VERSION = 1;
+const DLL_VERSION = 2;
 
 const PS_SCRIPT = `
 param([string]$Action, [string]$Id = '', [string]$Roles = '')
@@ -75,6 +84,7 @@ Add-Type -Path $dll
 switch ($Action) {
   'list' { [VoixStudio.Audio]::List() }
   'set' { [VoixStudio.Audio]::SetDefault($Id, $Roles); 'ok' }
+  'rename' { [VoixStudio.Audio]::Rename($Id, $Roles); 'ok' }
 }
 `;
 
@@ -128,13 +138,58 @@ async function status() {
   // Le vrai micro de l'utilisateur : le micro par défaut d'avant s'il est physique, sinon le premier micro physique
   const candidates = [def, prev && devs.capture.find((d) => d.id === prev.consoleId), ...devs.capture];
   const real = candidates.find((d) => d && !isVirtualCapture(d));
+  const cfg = cable ? await cableConfig() : {};
   return {
     installed: !!cable,
     cableName: cable ? cable.name : '',
+    renamed: !!(cable && cable.name.startsWith(CABLE_NAME)),
     isDefault: !!(cable && def && def.id === cable.id),
     realMicName: real ? real.name : '',
+    latency: cfg.latency || 0,
+    sampleRate: cfg.sampleRate || 48000,
     captures: devs.capture.map((d) => ({ name: d.name, virtual: isVirtualCapture(d) })),
   };
+}
+
+// ---------- Nom et délai du câble virtuel
+const CABLE_NAME = 'Voix Studio';
+const CABLE_KEY = 'HKLM\\SOFTWARE\\VB-Audio\\Cable';
+
+async function renameCable() {
+  const devs = await listDevices();
+  const cable = devs.capture.find(isCableCapture);
+  if (!cable) throw new Error('Le micro virtuel n’est pas installé.');
+  if (!cable.name.startsWith(CABLE_NAME)) await runPs(['rename', cable.id, CABLE_NAME]);
+  return true;
+}
+
+// Réglages du pilote VB-CABLE : réserve de son (en échantillons) et fréquence interne
+function cableConfig() {
+  return new Promise((resolve) => {
+    execFile('reg.exe', ['query', CABLE_KEY], { windowsHide: true }, (err, stdout) => {
+      if (err) { resolve({}); return; }
+      const val = (name) => {
+        const m = stdout.match(new RegExp(name + '\\s+REG_DWORD\\s+0x([0-9a-f]+)', 'i'));
+        return m ? parseInt(m[1], 16) : 0;
+      };
+      resolve({ latency: val('VBAudioCableWDM_Latency'), sampleRate: val('VBAudioCableWDM_SR') });
+    });
+  });
+}
+
+const LATENCIES = [512, 1024, 2048, 3072, 7168];
+
+// Écrire dans HKLM demande les droits administrateur : Windows affiche sa demande d'autorisation
+async function setCableLatency(samples) {
+  if (!LATENCIES.includes(samples)) throw new Error('Valeur de délai inconnue.');
+  const args = `add ${CABLE_KEY} /v VBAudioCableWDM_Latency /t REG_DWORD /d ${samples} /f`;
+  const cmd = `$p = Start-Process -FilePath reg.exe -ArgumentList '${args}' -Verb RunAs -WindowStyle Hidden -Wait -PassThru; exit $p.ExitCode`;
+  await new Promise((resolve) => {
+    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', cmd], { windowsHide: true }, () => resolve());
+  });
+  const cfg = await cableConfig();
+  if (cfg.latency !== samples) throw new Error('Le délai n’a pas été changé : l’autorisation de Windows a été refusée.');
+  return cfg.latency;
 }
 
 async function makeDefault() {
@@ -187,4 +242,4 @@ async function installCable() {
   return status();
 }
 
-module.exports = { status, makeDefault, restoreDefault, installCable, readPrevious };
+module.exports = { status, makeDefault, restoreDefault, installCable, readPrevious, renameCable, setCableLatency };

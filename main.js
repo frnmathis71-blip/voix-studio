@@ -75,6 +75,8 @@ ipcMain.handle('vmic:status', () => audioDevices.status());
 ipcMain.handle('vmic:enable', () => audioDevices.makeDefault());
 ipcMain.handle('vmic:restore', () => audioDevices.restoreDefault());
 ipcMain.handle('vmic:install', () => audioDevices.installCable());
+ipcMain.handle('vmic:rename', () => audioDevices.renameCable());
+ipcMain.handle('vmic:setLatency', (_e, samples) => audioDevices.setCableLatency(Number(samples)));
 
 // Sons d'autres soundboards
 ipcMain.handle('sounds:scan', () => soundSources.scan());
