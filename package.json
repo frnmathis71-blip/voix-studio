@@ -1,7 +1,7 @@
 {
   "name": "voix-studio",
   "productName": "Voix Studio",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Changeur de voix en temps réel avec réglages micro, effets sonores et enregistrement.",
   "author": "frnmathis71-blip",
   "license": "UNLICENSED",
