@@ -15,6 +15,10 @@ contextBridge.exposeInMainWorld('desktop', {
     rename: () => ipcRenderer.invoke('vmic:rename'),
     setLatency: (samples) => ipcRenderer.invoke('vmic:setLatency', samples),
   },
+  mic: {
+    isMuted: (name) => ipcRenderer.invoke('mic:muted', name),
+    unmute: (name) => ipcRenderer.invoke('mic:unmute', name),
+  },
   sounds: {
     scan: () => ipcRenderer.invoke('sounds:scan'),
     pickFolder: () => ipcRenderer.invoke('sounds:pickFolder'),

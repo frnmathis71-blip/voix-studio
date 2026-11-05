@@ -25,6 +25,8 @@ namespace VoixStudio {
   [Guid("f8679f50-850a-41cf-9c72-430f290290c8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
   public interface IPolicyConfig { void M1(); void M2(); void M3(); void M4(); void M5(); void M6(); void M7(); void M8(); void M9(); void M10(); [PreserveSig] int SetDefaultEndpoint([MarshalAs(UnmanagedType.LPWStr)] string id, int role); void M12(); }
   [ComImport, Guid("870af99c-171d-4f9e-af0d-e63df40c2bc9")] public class PolicyConfigClient {}
+  [Guid("5CDF2C82-841E-4546-9722-0CF74078229A"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+  public interface IAudioEndpointVolume { int M1(); int M2(); int M3(); int M4(); int M5(); int M6(); int M7(); int M8(); int M9(); int M10(); int M11(); [PreserveSig] int SetMute(bool m, ref Guid ctx); [PreserveSig] int GetMute(out bool m); }
   public static class Audio {
     static string Id(IMMDevice d) { string s; d.GetId(out s); return s; }
     static string Name(IMMDevice d) {
@@ -35,6 +37,19 @@ namespace VoixStudio {
     }
     static string Esc(string s) { return s.Replace("\\", "\\\\").Replace("\"", "\\\""); }
     static string DefaultId(IMMDeviceEnumerator e, int flow, int role) { IMMDevice d; return e.GetDefaultAudioEndpoint(flow, role, out d) == 0 ? Id(d) : ""; }
+    static IAudioEndpointVolume Volume(IMMDevice d) {
+      Guid iid = new Guid("5CDF2C82-841E-4546-9722-0CF74078229A"); object o;
+      d.Activate(ref iid, 23, IntPtr.Zero, out o);
+      return (IAudioEndpointVolume)o;
+    }
+    static bool Muted(IMMDevice d) { try { bool m; Volume(d).GetMute(out m); return m; } catch { return false; } }
+    // Un micro coupé dans Windows (ou par son bouton tactile) n'envoie que du silence
+    public static void Unmute(string id) {
+      IMMDeviceEnumerator e = (IMMDeviceEnumerator)new MMDeviceEnumerator();
+      IMMDevice d; e.GetDevice(id, out d);
+      Guid ctx = Guid.Empty;
+      Marshal.ThrowExceptionForHR(Volume(d).SetMute(false, ref ctx));
+    }
     public static string List() {
       IMMDeviceEnumerator e = (IMMDeviceEnumerator)new MMDeviceEnumerator();
       StringBuilder sb = new StringBuilder("{");
@@ -47,7 +62,7 @@ namespace VoixStudio {
           IMMDevice d; c.Item(i, out d);
           string id = Id(d);
           if (i > 0) sb.Append(",");
-          sb.AppendFormat("{{\"id\":\"{0}\",\"name\":\"{1}\",\"isDefault\":{2},\"isComms\":{3}}}", Esc(id), Esc(Name(d)), id == def ? "true" : "false", id == com ? "true" : "false");
+          sb.AppendFormat("{{\"id\":\"{0}\",\"name\":\"{1}\",\"isDefault\":{2},\"isComms\":{3},\"muted\":{4}}}", Esc(id), Esc(Name(d)), id == def ? "true" : "false", id == com ? "true" : "false", flow == 1 && Muted(d) ? "true" : "false");
         }
         sb.Append("]");
       }
@@ -70,7 +85,7 @@ namespace VoixStudio {
 }`;
 
 // La DLL compilée est mise en cache : la compilation prend une seconde, le chargement presque rien.
-const DLL_VERSION = 2;
+const DLL_VERSION = 3;
 
 const PS_SCRIPT = `
 param([string]$Action, [string]$Id = '', [string]$Roles = '')
@@ -85,6 +100,7 @@ switch ($Action) {
   'list' { [VoixStudio.Audio]::List() }
   'set' { [VoixStudio.Audio]::SetDefault($Id, $Roles); 'ok' }
   'rename' { [VoixStudio.Audio]::Rename($Id, $Roles); 'ok' }
+  'unmute' { [VoixStudio.Audio]::Unmute($Id); 'ok' }
 }
 `;
 
@@ -145,6 +161,7 @@ async function status() {
     renamed: !!(cable && cable.name.startsWith(CABLE_NAME)),
     isDefault: !!(cable && def && def.id === cable.id),
     realMicName: real ? real.name : '',
+    realMicMuted: !!(real && real.muted),
     latency: cfg.latency || 0,
     sampleRate: cfg.sampleRate || 48000,
     captures: devs.capture.map((d) => ({ name: d.name, virtual: isVirtualCapture(d) })),
@@ -154,6 +171,15 @@ async function status() {
 // ---------- Nom et délai du câble virtuel
 const CABLE_NAME = 'Voix Studio';
 const CABLE_KEY = 'HKLM\\SOFTWARE\\VB-Audio\\Cable';
+
+// Réactive un micro coupé, retrouvé par son nom (celui qu'affiche Voix Studio)
+async function unmuteMic(name) {
+  const devs = await listDevices();
+  const mic = devs.capture.find((d) => d.name === name || (name && (name.startsWith(d.name) || d.name.startsWith(name))));
+  if (!mic) throw new Error('Micro introuvable.');
+  if (mic.muted) await runPs(['unmute', mic.id]);
+  return true;
+}
 
 async function renameCable() {
   const devs = await listDevices();
@@ -242,4 +268,11 @@ async function installCable() {
   return status();
 }
 
-module.exports = { status, makeDefault, restoreDefault, installCable, readPrevious, renameCable, setCableLatency };
+module.exports = { status, makeDefault, restoreDefault, installCable, readPrevious, renameCable, setCableLatency, unmuteMic, micMuted };
+
+// Le micro choisi dans Voix Studio est-il coupé dans Windows ?
+async function micMuted(name) {
+  const devs = await listDevices();
+  const mic = devs.capture.find((d) => d.name === name || (name && (name.startsWith(d.name) || d.name.startsWith(name))));
+  return !!(mic && mic.muted);
+}

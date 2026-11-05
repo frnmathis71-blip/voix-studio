@@ -196,7 +196,8 @@ class Engine {
       this.monCtx = new AudioContext({ latencyHint: 'interactive' });
       this.monCtx.createMediaStreamSource(this.N.monDest.stream).connect(this.monCtx.destination);
     }
-    if (this.monCtx.setSinkId) {
+    // Ne change la sortie que si elle diffère : redemander la même sortie peut échouer pour rien
+    if (this.monCtx.setSinkId && this.monCtx.sinkId !== (sinkId || '')) {
       try { await this.monCtx.setSinkId(sinkId || ''); } catch (e) { this.emit('warn', 'Impossible de choisir la sortie du retour casque.'); }
     }
     await this.monCtx.resume();
@@ -254,6 +255,7 @@ class Engine {
     this.ramp(N.toVirt.gain, 0, 0.01);
     this.ramp(N.monDirect.gain, 1, 0.01);
     this.closeMonitorBridge();
+    if (this.ctx.sinkId === (m.monitorOutId || '')) return;
     try { await this.ctx.setSinkId(m.monitorOutId || ''); } catch (e) { this.emit('warn', 'Impossible de choisir la sortie du retour casque.'); }
   }
 

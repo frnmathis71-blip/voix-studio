@@ -703,6 +703,7 @@
     if (!engine.running) return;
     if (RESTART_KEYS.includes(key)) {
       try { await engine.openMic(); } catch (e) { toast('Ce micro ne répond pas'); }
+      if (key === 'inputId') checkMicMuted();
     } else if (OUTPUT_KEYS.includes(key)) {
       await engine.setOutputs(effectiveOutputs());
     } else {
@@ -1100,7 +1101,7 @@
 
   // ---------- Boucle des vumètres
   const pct = (db, floor = -60) => Math.max(0, Math.min(1, (db - floor) / -floor));
-  let inShown = -90, inPeak = -90, inPeakT = 0, hotUntil = 0, quietSince = 0;
+  let inShown = -90, inPeak = -90, inPeakT = 0, hotUntil = 0, quietSince = 0, silentSince = 0;
 
   function setMeter(el, db) {
     el.style.width = pct(db) * 100 + '%';
@@ -1115,6 +1116,12 @@
       const mic = engine.readMeter(N.micAn);
       const post = engine.readMeter(N.postAn);
       engine.tickAgc(mic.rms);
+
+      // Silence numérique (un vrai micro capte toujours un peu de bruit) : le micro est peut-être coupé
+      if (pre.peak > -110) silentSince = 0;
+      else if (!silentSince) silentSince = now;
+      else if (now - silentSince > 2000 && now - lastMuteCheck > 8000) checkMicMuted();
+      if (pre.peak > -110 && !$('#micMutedBar').hidden && now - lastMuteCheck > 1000) checkMicMuted();
 
       inShown = pre.peak > inShown ? pre.peak : inShown - 0.8;
       if (pre.peak > inPeak || now - inPeakT > 1500) { inPeak = pre.peak; inPeakT = now; }
@@ -1258,6 +1265,34 @@
     renderVmic();
   }
 
+  // Micro coupé dans Windows (souvent par la touche tactile du micro) : on le signale
+  const selectedMicName = () => {
+    const sel = $('#inputSel');
+    const opt = sel.options[sel.selectedIndex];
+    return opt && opt.value ? opt.textContent : (vmic ? vmic.realMicName : '');
+  };
+  let lastMuteCheck = 0;
+
+  async function checkMicMuted() {
+    if (!window.desktop) return;
+    lastMuteCheck = performance.now();
+    const name = selectedMicName();
+    let muted = false;
+    try { muted = await window.desktop.mic.isMuted(name); } catch (e) { muted = false; }
+    $('#micMutedBar').hidden = !muted;
+    if (muted) $('#micMutedText').textContent = '« ' + name + ' » est coupé dans Windows, ou par la touche tactile du micro : Voix Studio ne reçoit que du silence.';
+  }
+
+  $('#micUnmute').addEventListener('click', async () => {
+    try {
+      await window.desktop.mic.unmute(selectedMicName());
+      toast('Micro réactivé');
+    } catch (e) {
+      toast('Impossible de réactiver ce micro. Touchez la surface du micro ou ouvrez les paramètres de son de Windows.');
+    }
+    await checkMicMuted();
+  });
+
   // Le micro virtuel s'affiche « Voix Studio » dans Windows, Discord et les jeux
   async function renameCable() {
     if (!vmic || !vmic.installed || vmic.renamed) return;
@@ -1308,6 +1343,7 @@
     await renameCable();
     await applyWinDefault();
     if (vmicNotice()) notice(vmicNotice());
+    await checkMicMuted();
     if (state.autoStart && !engine.running) power.click();
   }
 

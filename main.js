@@ -76,6 +76,8 @@ ipcMain.handle('vmic:enable', () => audioDevices.makeDefault());
 ipcMain.handle('vmic:restore', () => audioDevices.restoreDefault());
 ipcMain.handle('vmic:install', () => audioDevices.installCable());
 ipcMain.handle('vmic:rename', () => audioDevices.renameCable());
+ipcMain.handle('mic:muted', (_e, name) => audioDevices.micMuted(String(name || '')));
+ipcMain.handle('mic:unmute', (_e, name) => audioDevices.unmuteMic(String(name || '')));
 ipcMain.handle('vmic:setLatency', (_e, samples) => audioDevices.setCableLatency(Number(samples)));
 
 // Sons d'autres soundboards
